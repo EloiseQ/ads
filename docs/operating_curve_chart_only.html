@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operating Curve — Budget Intensity & ROI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',system-ui,sans-serif; background:#fff; padding:24px; }
+#chart-container { position:relative; max-width:900px; margin:0 auto; }
+canvas { display:block; width:100%; border-radius:8px; }
+.tip { position:absolute; pointer-events:none; background:rgba(15,23,42,.92); color:#fff;
+        border-radius:10px; padding:12px 16px; font-size:11px; line-height:1.6;
+        box-shadow:0 4px 16px rgba(0,0,0,.25); opacity:0; transition:opacity .12s;
+        white-space:nowrap; z-index:10; }
+.tip.show { opacity:1; }
+.tip .tl { font-weight:700; font-size:12px; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,.15); padding-bottom:4px; }
+.tip .tr { display:flex; gap:16px; }
+.tip .tc .tk { font-size:9px; text-transform:uppercase; letter-spacing:.4px; color:#94A3B8; }
+.tip .tc .tv { font-size:13px; font-weight:700; }
+.legend { display:flex; flex-wrap:wrap; gap:16px; margin-top:12px; padding-top:10px; border-top:1px solid #F1F5F9; font-size:11px; color:#64748B; }
+.legend .li { display:flex; align-items:center; gap:6px; }
+.legend .li .sw { width:24px; height:3px; border-radius:2px; flex-shrink:0; }
+.legend .li .sw.dash { background:repeating-linear-gradient(90deg,currentColor 0 6px,transparent 6px 10px); height:2px; }
+.legend .li .sq { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+</style>
+</head>
+<body>
+<div id="chart-container">
+  <canvas id="cv"></canvas>
+  <div class="tip" id="tip"></div>
+</div>
+<div class="legend" style="max-width:900px; margin:12px auto 0;">
+  <div class="li"><div class="sw" style="background:#3B82F6"></div> Budget Intensity (× baseline)</div>
+  <div class="li"><div class="sw dash" style="color:#EF4444"></div> ROI Guardrail (floor)</div>
+  <div class="li"><div class="sw" style="background:#F97316"></div> Estimated Actual ROI</div>
+  <div class="li"><div class="sq" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3)"></div> ROI above floor</div>
+  <div class="li"><div class="sq" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25)"></div> ROI near / below floor</div>
+</div>
+
+<script>
+const D = {"days": [0.0, 0.13, 0.26, 0.39, 0.52, 0.65, 0.78, 0.91, 1.04, 1.17, 1.3, 1.43, 1.56, 1.69, 1.82, 1.95, 2.09, 2.22, 2.35, 2.48, 2.61, 2.74, 2.87, 3.0, 3.13, 3.26, 3.39, 3.52, 3.65, 3.78, 3.91, 4.04, 4.17, 4.3, 4.43, 4.56, 4.69, 4.82, 4.95, 5.08, 5.21, 5.34, 5.47, 5.6, 5.73, 5.86, 5.99, 6.13, 6.26, 6.39, 6.52, 6.65, 6.78, 6.91, 7.04, 7.17, 7.3, 7.43, 7.56, 7.69, 7.82, 7.95, 8.08, 8.21, 8.34, 8.47, 8.6, 8.73, 8.86, 8.99, 9.12, 9.25, 9.38, 9.51, 9.64, 9.77, 9.9, 10.04, 10.17, 10.3, 10.43, 10.56, 10.69, 10.82, 10.95, 11.08, 11.21, 11.34, 11.47, 11.6, 11.73, 11.86, 11.99, 12.12, 12.25, 12.38, 12.51, 12.64, 12.77, 12.9, 13.03, 13.16, 13.29, 13.42, 13.55, 13.68, 13.81, 13.94, 14.08, 14.21, 14.34, 14.47, 14.6, 14.73, 14.86, 14.99, 15.12, 15.25, 15.38, 15.51, 15.64, 15.77, 15.9, 16.03, 16.16, 16.29, 16.42, 16.55, 16.68, 16.81, 16.94, 17.07, 17.2, 17.33, 17.46, 17.59, 17.72, 17.85, 17.98, 18.12, 18.25, 18.38, 18.51, 18.64, 18.77, 18.9, 19.03, 19.16, 19.29, 19.42, 19.55, 19.68, 19.81, 19.94, 20.07, 20.2, 20.33, 20.46, 20.59, 20.72, 20.85, 20.98, 21.11, 21.24, 21.37, 21.5, 21.63, 21.76, 21.89, 22.03, 22.16, 22.29, 22.42, 22.55, 22.68, 22.81, 22.94, 23.07, 23.2, 23.33, 23.46, 23.59, 23.72, 23.85, 23.98, 24.11, 24.24, 24.37, 24.5, 24.63, 24.76, 24.89, 25.02, 25.15, 25.28, 25.41, 25.54, 25.67, 25.8, 25.93, 26.07, 26.2, 26.33, 26.46, 26.59, 26.72, 26.85, 26.98, 27.11, 27.24, 27.37, 27.5, 27.63, 27.76, 27.89, 28.02, 28.15, 28.28, 28.41, 28.54, 28.67, 28.8, 28.93, 29.06, 29.19, 29.32, 29.45, 29.58, 29.71, 29.84, 29.97, 30.11, 30.24, 30.37, 30.5, 30.63, 30.76, 30.89, 31.02, 31.15, 31.28, 31.41, 31.54, 31.67, 31.8, 31.93, 32.06, 32.19, 32.32, 32.45, 32.58, 32.71, 32.84, 32.97, 33.1, 33.23, 33.36, 33.49, 33.62, 33.75, 33.88, 34.02, 34.15, 34.28, 34.41, 34.54, 34.67, 34.8, 34.93, 35.06, 35.19, 35.32, 35.45, 35.58, 35.71, 35.84, 35.97, 36.1, 36.23, 36.36, 36.49, 36.62, 36.75, 36.88, 37.01, 37.14, 37.27, 37.4, 37.53, 37.66, 37.79, 37.92, 38.06, 38.19, 38.32, 38.45, 38.58, 38.71, 38.84, 38.97, 39.1, 39.23, 39.36, 39.49, 39.62, 39.75, 39.88, 40.01, 40.14, 40.27, 40.4, 40.53, 40.66, 40.79, 40.92, 41.05, 41.18, 41.31, 41.44, 41.57, 41.7, 41.83, 41.96, 42.1, 42.23, 42.36, 42.49, 42.62, 42.75, 42.88, 43.01, 43.14, 43.27, 43.4, 43.53, 43.66, 43.79, 43.92, 44.05, 44.18, 44.31, 44.44, 44.57, 44.7, 44.83, 44.96, 45.09, 45.22, 45.35, 45.48, 45.61, 45.74, 45.87, 46.01, 46.14, 46.27, 46.4, 46.53, 46.66, 46.79, 46.92, 47.05, 47.18, 47.31, 47.44, 47.57, 47.7, 47.83, 47.96, 48.09, 48.22, 48.35, 48.48, 48.61, 48.74, 48.87, 49.0, 49.13, 49.26, 49.39, 49.52, 49.65, 49.78, 49.91, 50.05, 50.18, 50.31, 50.44, 50.57, 50.7, 50.83, 50.96, 51.09, 51.22, 51.35, 51.48, 51.61, 51.74, 51.87, 52.0], "spend": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.001, 1.001, 1.002, 1.003, 1.005, 1.007, 1.009, 1.013, 1.017, 1.023, 1.03, 1.038, 1.047, 1.058, 1.071, 1.084, 1.1, 1.116, 1.133, 1.152, 1.171, 1.19, 1.211, 1.231, 1.252, 1.273, 1.295, 1.316, 1.337, 1.358, 1.379, 1.399, 1.42, 1.44, 1.459, 1.479, 1.498, 1.516, 1.535, 1.552, 1.57, 1.587, 1.605, 1.622, 1.638, 1.655, 1.672, 1.688, 1.704, 1.721, 1.737, 1.754, 1.77, 1.787, 1.803, 1.82, 1.838, 1.855, 1.874, 1.893, 1.913, 1.934, 1.956, 1.98, 2.005, 2.032, 2.061, 2.091, 2.123, 2.157, 2.193, 2.23, 2.269, 2.309, 2.35, 2.393, 2.437, 2.483, 2.531, 2.582, 2.636, 2.696, 2.761, 2.833, 2.914, 3.005, 3.107, 3.222, 3.35, 3.492, 3.648, 3.818, 4.0, 4.193, 4.397, 4.607, 4.823, 5.042, 5.26, 5.476, 5.687, 5.89, 6.084, 6.268, 6.439, 6.597, 6.741, 6.872, 6.989, 7.094, 7.186, 7.266, 7.334, 7.391, 7.437, 7.471, 7.493, 7.504, 7.502, 7.487, 7.459, 7.419, 7.365, 7.299, 7.221, 7.132, 7.033, 6.924, 6.806, 6.679, 6.543, 6.4, 6.249, 6.091, 5.927, 5.757, 5.582, 5.405, 5.226, 5.048, 4.872, 4.7, 4.534, 4.376, 4.225, 4.084, 3.953, 3.83, 3.717, 3.611, 3.514, 3.424, 3.34, 3.261, 3.189, 3.121, 3.058, 3.0, 2.946, 2.897, 2.851, 2.809, 2.771, 2.736, 2.704, 2.674, 2.646, 2.619, 2.594, 2.57, 2.547, 2.525, 2.503, 2.481, 2.46, 2.439, 2.419, 2.399, 2.38, 2.361, 2.343, 2.325, 2.308, 2.291, 2.275, 2.26, 2.245, 2.231, 2.217, 2.204, 2.191, 2.179, 2.168, 2.157, 2.147, 2.137, 2.128, 2.12, 2.112, 2.105, 2.099, 2.093, 2.088, 2.083, 2.079, 2.075, 2.071, 2.067, 2.063, 2.06, 2.056, 2.053, 2.05, 2.047, 2.043, 2.04, 2.037, 2.034, 2.031, 2.028, 2.025, 2.022, 2.019, 2.017, 2.014, 2.012, 2.01, 2.008, 2.007, 2.005, 2.004, 2.003, 2.002, 2.002, 2.001, 2.001, 2.001, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0], "roiGuard": [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.999, 3.999, 3.999, 3.998, 3.998, 3.997, 3.995, 3.994, 3.992, 3.989, 3.987, 3.984, 3.98, 3.976, 3.972, 3.967, 3.962, 3.956, 3.951, 3.945, 3.939, 3.932, 3.926, 3.92, 3.913, 3.907, 3.9, 3.894, 3.887, 3.881, 3.874, 3.867, 3.86, 3.854, 3.846, 3.839, 3.832, 3.824, 3.815, 3.807, 3.798, 3.789, 3.779, 3.769, 3.758, 3.747, 3.735, 3.724, 3.712, 3.699, 3.687, 3.674, 3.662, 3.649, 3.636, 3.623, 3.611, 3.598, 3.585, 3.573, 3.56, 3.548, 3.536, 3.524, 3.513, 3.501, 3.49, 3.479, 3.469, 3.458, 3.448, 3.437, 3.427, 3.417, 3.407, 3.397, 3.387, 3.377, 3.368, 3.358, 3.348, 3.338, 3.327, 3.317, 3.306, 3.295, 3.283, 3.27, 3.256, 3.24, 3.223, 3.204, 3.183, 3.159, 3.133, 3.103, 3.072, 3.037, 2.999, 2.959, 2.917, 2.873, 2.827, 2.779, 2.731, 2.681, 2.631, 2.581, 2.53, 2.48, 2.429, 2.379, 2.33, 2.281, 2.233, 2.186, 2.141, 2.096, 2.053, 2.011, 1.971, 1.932, 1.895, 1.859, 1.824, 1.791, 1.759, 1.729, 1.7, 1.673, 1.648, 1.626, 1.605, 1.586, 1.57, 1.556, 1.544, 1.534, 1.527, 1.521, 1.517, 1.515, 1.514, 1.514, 1.516, 1.52, 1.525, 1.531, 1.539, 1.549, 1.56, 1.572, 1.586, 1.602, 1.62, 1.64, 1.662, 1.687, 1.714, 1.744, 1.777, 1.813, 1.853, 1.896, 1.942, 1.991, 2.042, 2.095, 2.149, 2.202, 2.255, 2.307, 2.356, 2.402, 2.445, 2.485, 2.522, 2.556, 2.586, 2.614, 2.639, 2.663, 2.684, 2.704, 2.722, 2.74, 2.756, 2.771, 2.785, 2.798, 2.811, 2.823, 2.834, 2.845, 2.855, 2.865, 2.874, 2.884, 2.893, 2.902, 2.911, 2.92, 2.929, 2.939, 2.948, 2.957, 2.967, 2.977, 2.987, 2.997, 3.008, 3.019, 3.03, 3.041, 3.053, 3.065, 3.077, 3.089, 3.101, 3.114, 3.126, 3.138, 3.15, 3.162, 3.174, 3.186, 3.197, 3.208, 3.219, 3.23, 3.241, 3.251, 3.261, 3.272, 3.282, 3.292, 3.302, 3.311, 3.321, 3.331, 3.341, 3.351, 3.36, 3.37, 3.38, 3.39, 3.399, 3.409, 3.418, 3.428, 3.437, 3.446, 3.456, 3.464, 3.473, 3.482, 3.49, 3.498, 3.506, 3.514, 3.521, 3.528, 3.536, 3.543, 3.55, 3.556, 3.563, 3.57, 3.576, 3.583, 3.589, 3.596, 3.602, 3.609, 3.616, 3.622, 3.629, 3.635, 3.642, 3.648, 3.655, 3.661, 3.668, 3.674, 3.681, 3.687, 3.694, 3.7, 3.707, 3.713, 3.72, 3.726, 3.733, 3.739, 3.746, 3.752, 3.759, 3.765, 3.772, 3.778, 3.785, 3.791, 3.798, 3.805, 3.811, 3.818, 3.824, 3.831, 3.837, 3.844, 3.85, 3.857, 3.863, 3.87, 3.876, 3.883, 3.889, 3.896, 3.902, 3.909, 3.915, 3.922, 3.928, 3.934, 3.94, 3.946, 3.952, 3.958, 3.963, 3.968, 3.973, 3.977, 3.981, 3.985], "roiActual": [4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.55, 4.549, 4.549, 4.549, 4.548, 4.547, 4.546, 4.544, 4.542, 4.539, 4.536, 4.532, 4.527, 4.521, 4.515, 4.508, 4.5, 4.492, 4.483, 4.473, 4.463, 4.453, 4.443, 4.432, 4.421, 4.41, 4.398, 4.387, 4.376, 4.364, 4.353, 4.342, 4.33, 4.319, 4.307, 4.296, 4.284, 4.273, 4.261, 4.249, 4.237, 4.225, 4.213, 4.201, 4.189, 4.177, 4.164, 4.152, 4.139, 4.126, 4.114, 4.101, 4.088, 4.075, 4.062, 4.05, 4.037, 4.024, 4.012, 4.0, 3.988, 3.977, 3.966, 3.955, 3.945, 3.936, 3.927, 3.919, 3.911, 3.905, 3.898, 3.893, 3.887, 3.883, 3.878, 3.874, 3.87, 3.866, 3.863, 3.859, 3.856, 3.853, 3.849, 3.846, 3.842, 3.838, 3.834, 3.829, 3.824, 3.817, 3.81, 3.801, 3.791, 3.779, 3.765, 3.748, 3.729, 3.708, 3.683, 3.656, 3.627, 3.595, 3.561, 3.525, 3.487, 3.448, 3.408, 3.366, 3.324, 3.282, 3.238, 3.195, 3.15, 3.106, 3.06, 3.014, 2.967, 2.92, 2.871, 2.822, 2.772, 2.721, 2.669, 2.616, 2.563, 2.51, 2.456, 2.403, 2.35, 2.299, 2.249, 2.201, 2.155, 2.112, 2.072, 2.035, 2.002, 1.971, 1.944, 1.92, 1.899, 1.881, 1.866, 1.852, 1.842, 1.833, 1.826, 1.821, 1.818, 1.817, 1.817, 1.82, 1.824, 1.831, 1.839, 1.849, 1.861, 1.875, 1.891, 1.909, 1.929, 1.952, 1.976, 2.004, 2.034, 2.067, 2.102, 2.14, 2.18, 2.221, 2.265, 2.309, 2.353, 2.398, 2.442, 2.485, 2.527, 2.568, 2.607, 2.645, 2.681, 2.716, 2.749, 2.78, 2.809, 2.837, 2.863, 2.887, 2.909, 2.929, 2.947, 2.963, 2.977, 2.99, 3.001, 3.01, 3.019, 3.026, 3.033, 3.039, 3.045, 3.05, 3.055, 3.059, 3.064, 3.068, 3.072, 3.076, 3.08, 3.084, 3.088, 3.091, 3.095, 3.098, 3.102, 3.105, 3.108, 3.111, 3.114, 3.117, 3.119, 3.122, 3.124, 3.126, 3.129, 3.131, 3.133, 3.134, 3.136, 3.138, 3.139, 3.14, 3.141, 3.142, 3.143, 3.144, 3.145, 3.146, 3.147, 3.147, 3.148, 3.149, 3.149, 3.15, 3.151, 3.151, 3.152, 3.153, 3.153, 3.154, 3.154, 3.155, 3.156, 3.156, 3.157, 3.157, 3.158, 3.158, 3.158, 3.159, 3.159, 3.159, 3.159, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16, 3.16], "baselineDaily": 7176};
+
+const stages = [
+  { name:'Baseline Operating', s:0, e:14, bg:'#F1F5F9', lc:'#64748B' },
+  { name:'Pre-SBD Warm-up',    s:14, e:24, bg:'#EFF6FF', lc:'#3B82F6' },
+  { name:'SBD Peak Scale',     s:24, e:31, bg:'#FEF2F2', lc:'#EF4444' },
+  { name:'Post-SBD Recovery',  s:31, e:38, bg:'#FFFBEB', lc:'#F59E0B' },
+  { name:'Stabilized',         s:38, e:52, bg:'#F0FDF4', lc:'#22C55E' },
+];
+
+const annotations = [
+  { day:7,  y:.15, text:'Steady state learning',    c:'#64748B' },
+  { day:19, y:.55, text:'Algorithm warm-up',        c:'#3B82F6' },
+  { day:27, y:.72, text:'PEAK SCALE · Max delivery', c:'#EF4444' },
+  { day:34, y:.48, text:'Efficiency recovery',       c:'#F59E0B' },
+  { day:45, y:.32, text:'Baseline normalization',    c:'#22C55E' },
+];
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const tip = document.getElementById('tip');
+const container = document.getElementById('chart-container');
+const dpr = window.devicePixelRatio || 1;
+
+const PAD = { l:60, r:60, t:50, b:56 };
+let W, H, pw, ph;
+
+function resize() {
+  const rect = container.getBoundingClientRect();
+  W = rect.width;
+  H = Math.min(420, W * 0.42);
+  cv.style.height = H + 'px';
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pw = W - PAD.l - PAD.r;
+  ph = H - PAD.t - PAD.b;
+  draw();
+}
+
+const maxDay = 52, maxSpend = 9.5, minROI = 0.8, maxROI = 5.0;
+
+function xPos(day) { return PAD.l + (day / maxDay) * pw; }
+function ySpend(v) { return PAD.t + (1 - v / maxSpend) * ph; }
+function yROI(v) { return PAD.t + (1 - (v - minROI) / (maxROI - minROI)) * ph; }
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  stages.forEach(st => {
+    ctx.fillStyle = st.bg;
+    const x0 = xPos(st.s), x1 = xPos(st.e);
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(x0, PAD.t, x1 - x0, ph);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = st.lc;
+    ctx.font = '600 10px Inter,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(st.name, (x0 + x1) / 2, PAD.t + 16);
+  });
+
+  ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+  stages.slice(1).forEach(st => {
+    ctx.beginPath(); ctx.moveTo(xPos(st.s), PAD.t); ctx.lineTo(xPos(st.s), PAD.t + ph); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  const y1x = ySpend(1);
+  ctx.strokeStyle = 'rgba(59,130,246,.2)'; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(PAD.l, y1x); ctx.lineTo(PAD.l + pw, y1x); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(59,130,246,.35)'; ctx.font = '500 9px Inter'; ctx.textAlign = 'left';
+  ctx.fillText('1× baseline', PAD.l + 4, y1x - 4);
+
+  ctx.beginPath();
+  ctx.moveTo(xPos(D.days[0]), ySpend(0));
+  D.days.forEach((d, i) => ctx.lineTo(xPos(d), ySpend(D.spend[i])));
+  ctx.lineTo(xPos(D.days[D.days.length-1]), ySpend(0));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(59,130,246,.08)';
+  ctx.fill();
+
+  for (let i = 0; i < D.days.length - 1; i++) {
+    const x0 = xPos(D.days[i]), x1 = xPos(D.days[i+1]);
+    const yg0 = yROI(D.roiGuard[i]), yg1 = yROI(D.roiGuard[i+1]);
+    const ya0 = yROI(D.roiActual[i]), ya1 = yROI(D.roiActual[i+1]);
+    const above = D.roiActual[i] >= D.roiGuard[i];
+    ctx.beginPath();
+    ctx.moveTo(x0, yg0); ctx.lineTo(x1, yg1); ctx.lineTo(x1, ya1); ctx.lineTo(x0, ya0);
+    ctx.closePath();
+    ctx.fillStyle = above ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
+    ctx.fill();
+  }
+
+  ctx.beginPath(); ctx.strokeStyle = '#3B82F6'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  D.days.forEach((d, i) => { i === 0 ? ctx.moveTo(xPos(d), ySpend(D.spend[i])) : ctx.lineTo(xPos(d), ySpend(D.spend[i])); });
+  ctx.stroke();
+
+  ctx.beginPath(); ctx.strokeStyle = '#EF4444'; ctx.lineWidth = 2; ctx.setLineDash([7,4]);
+  D.days.forEach((d, i) => { i === 0 ? ctx.moveTo(xPos(d), yROI(D.roiGuard[i])) : ctx.lineTo(xPos(d), yROI(D.roiGuard[i])); });
+  ctx.stroke(); ctx.setLineDash([]);
+
+  ctx.beginPath(); ctx.strokeStyle = '#F97316'; ctx.lineWidth = 2; ctx.globalAlpha = 0.75;
+  D.days.forEach((d, i) => { i === 0 ? ctx.moveTo(xPos(d), yROI(D.roiActual[i])) : ctx.lineTo(xPos(d), yROI(D.roiActual[i])); });
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  annotations.forEach(a => {
+    const x = xPos(a.day), y = PAD.t + ph * (1 - a.y);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = a.c; ctx.lineWidth = 1.5;
+    const tw = ctx.measureText(a.text).width + 16;
+    const bh = 22, bx = x - tw/2, by = y - bh/2;
+    roundRect(ctx, bx, by, tw, bh, 6);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = a.c; ctx.font = '700 9px Inter,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(a.text, x, y + 3.5);
+  });
+
+  ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, PAD.t + ph); ctx.lineTo(PAD.l + pw, PAD.t + ph); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(PAD.l + pw, PAD.t); ctx.lineTo(PAD.l + pw, PAD.t + ph); ctx.stroke();
+
+  ctx.fillStyle = '#3B82F6'; ctx.font = '500 10px Inter'; ctx.textAlign = 'right';
+  [0, 2, 4, 6, 8].forEach(v => {
+    ctx.fillText(v + '×', PAD.l - 6, ySpend(v) + 3);
+    if (v > 0) {
+      ctx.strokeStyle = 'rgba(0,0,0,.04)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD.l, ySpend(v)); ctx.lineTo(PAD.l + pw, ySpend(v)); ctx.stroke();
+    }
+  });
+  ctx.save(); ctx.translate(14, PAD.t + ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle = '#3B82F6'; ctx.font = '600 11px Inter'; ctx.textAlign = 'center';
+  ctx.fillText('Budget Intensity (× baseline)', 0, 0); ctx.restore();
+
+  ctx.fillStyle = '#EF4444'; ctx.font = '500 10px Inter'; ctx.textAlign = 'left';
+  [1, 2, 3, 4, 5].forEach(v => ctx.fillText(v + '×', PAD.l + pw + 6, yROI(v) + 3));
+  ctx.save(); ctx.translate(W - 12, PAD.t + ph/2); ctx.rotate(Math.PI/2);
+  ctx.fillStyle = '#EF4444'; ctx.font = '600 11px Inter'; ctx.textAlign = 'center';
+  ctx.fillText('ROI', 0, 0); ctx.restore();
+
+  ctx.fillStyle = '#64748B'; ctx.font = '500 9px Inter'; ctx.textAlign = 'center';
+  const xticks = [[0,'D0'],[7,'D7'],[14,'D14'],[19,'D19'],[24,'SBD Start'],[27,'Peak'],[31,'SBD End'],[34,'D34'],[38,'D38'],[45,'D45'],[52,'D52']];
+  xticks.forEach(([d,l]) => {
+    const x = xPos(d);
+    ctx.fillText(l, x, PAD.t + ph + 14);
+    if (d === 24 || d === 31) {
+      ctx.fillStyle = d === 24 ? '#EF4444' : '#F59E0B';
+      ctx.font = '700 9px Inter';
+      ctx.fillText(l, x, PAD.t + ph + 14);
+      ctx.fillStyle = '#64748B'; ctx.font = '500 9px Inter';
+    }
+  });
+  ctx.fillStyle = '#94A3B8'; ctx.font = '500 10px Inter';
+  ctx.fillText('Days from Campaign Start', PAD.l + pw/2, H - 6);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+cv.addEventListener('mousemove', e => {
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const day = ((mx - PAD.l) / pw) * maxDay;
+  if (day < 0 || day > maxDay || my < PAD.t || my > PAD.t + ph) {
+    tip.classList.remove('show'); return;
+  }
+  let best = 0, bestDist = 1e9;
+  D.days.forEach((d, i) => { const dist = Math.abs(d - day); if (dist < bestDist) { bestDist = dist; best = i; } });
+
+  const sp = D.spend[best];
+  const rg = D.roiGuard[best];
+  const ra = D.roiActual[best];
+  const dd = D.days[best];
+
+  let stageName = '';
+  stages.forEach(st => { if (dd >= st.s && dd < st.e) stageName = st.name; });
+  if (dd >= 52) stageName = 'Stabilized';
+
+  tip.innerHTML = `
+    <div class="tl">Day ${Math.round(dd)} — ${stageName}</div>
+    <div class="tr">
+      <div class="tc"><div class="tk" style="color:#60A5FA">Budget</div><div class="tv" style="color:#3B82F6">${sp.toFixed(1)}× ($$${Math.round(sp * D.baselineDaily).toLocaleString()}/d)</div></div>
+      <div class="tc"><div class="tk" style="color:#FCA5A5">ROI Floor</div><div class="tv" style="color:#EF4444">${rg.toFixed(1)}×</div></div>
+      <div class="tc"><div class="tk" style="color:#FDBA74">Est. ROI</div><div class="tv" style="color:#F97316">${ra.toFixed(2)}×</div></div>
+    </div>`;
+  tip.classList.add('show');
+
+  let tx = mx + 16, ty = my - 40;
+  if (tx + 300 > W) tx = mx - 280;
+  if (ty < 0) ty = my + 16;
+  tip.style.left = tx + 'px';
+  tip.style.top = ty + 'px';
+
+  draw();
+  ctx.strokeStyle = 'rgba(100,116,139,.25)'; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+  const cx = xPos(dd);
+  ctx.beginPath(); ctx.moveTo(cx, PAD.t); ctx.lineTo(cx, PAD.t + ph); ctx.stroke();
+  ctx.setLineDash([]);
+  [[ySpend(sp), '#3B82F6'], [yROI(rg), '#EF4444'], [yROI(ra), '#F97316']].forEach(([y, c]) => {
+    ctx.beginPath(); ctx.arc(cx, y, 5, 0, Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke();
+  });
+});
+
+cv.addEventListener('mouseleave', () => { tip.classList.remove('show'); draw(); });
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
